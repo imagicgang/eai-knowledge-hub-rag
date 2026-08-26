@@ -93,7 +93,7 @@ export default function Home() {
           )}
           <form className="composer" onSubmit={ask}>
             <textarea value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); ask(); } }} placeholder="Ask about your enterprise knowledge…" aria-label="Question" rows={1} />
-            <div className="composer-actions"><span>Local AI <b>Qwen3 1.7B · Ollama</b></span><button disabled={!question.trim() || loading} aria-label="Send message"><ArrowUp size={18} /></button></div>
+            <div className="composer-actions"><span>Grounded AI <b>Configured provider</b></span><button disabled={!question.trim() || loading} aria-label="Send message"><ArrowUp size={18} /></button></div>
           </form>
           <p className="disclaimer">Answers are grounded in indexed sources. Always verify critical information.</p>
         </div>}

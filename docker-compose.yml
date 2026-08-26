@@ -1,6 +1,7 @@
 services:
   ollama:
     image: ollama/ollama:latest
+    profiles: ["local-llm"]
     environment:
       OLLAMA_HOST: 0.0.0.0:11434
       OLLAMA_KEEP_ALIVE: 10m
@@ -18,6 +19,7 @@ services:
 
   ollama-init:
     image: ollama/ollama:latest
+    profiles: ["local-llm"]
     environment:
       OLLAMA_HOST: http://ollama:11434
     command: ["pull", "qwen3:1.7b"]
@@ -56,9 +58,12 @@ services:
     build: ./python-ai
     environment:
       KNOWLEDGE_INDEX_PATH: /data/knowledge-index.json
-      LLM_PROVIDER: ollama
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
       OLLAMA_URL: http://ollama:11434
       OLLAMA_LLM_MODEL: qwen3:1.7b
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.6-luna}
+      OPENAI_REASONING_EFFORT: ${OPENAI_REASONING_EFFORT:-none}
     volumes:
       - knowledge-data:/data
     ports:
@@ -66,6 +71,7 @@ services:
     depends_on:
       ollama-init:
         condition: service_completed_successfully
+        required: false
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 5s

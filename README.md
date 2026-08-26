@@ -12,7 +12,7 @@ Next.js frontend (:3000) → Go backend (:8080) → Python AI (:8000) → Ollama
 - `backend/` — Go HTTP API, validation, upload handling, and AI service proxy.
 - `python-ai/` — FastAPI ingestion, retrieval orchestration, and replaceable LLM providers.
 
-Docker uses Ollama with `qwen3:1.7b` by default. The model is approximately 1.4 GB and supports multilingual answers while keeping all prompts and knowledge local. A `MockLLMProvider` remains available for tests and offline development.
+The provider is selected through `.env`. OpenAI with `gpt-5.6-luna` is the default configuration; Ollama with `qwen3:1.7b` remains available for fully local operation. A `MockLLMProvider` is used for isolated tests.
 
 ## Quick start
 
@@ -22,7 +22,13 @@ Run all services with Docker:
 docker compose up --build
 ```
 
-The first start downloads the local model and can take several minutes. Later starts reuse the `ollama-data` Docker volume.
+Before starting, put your project API key in `.env` as `OPENAI_API_KEY`. The key stays server-side in the Python AI container and must never use a `NEXT_PUBLIC_` prefix.
+
+To run the local Ollama provider instead, set `LLM_PROVIDER=ollama` and start the optional profile:
+
+```bash
+docker compose --profile local-llm up -d --build
+```
 
 Open [http://localhost:3000](http://localhost:3000), then try “What systems depend on Payment Service?”
 
