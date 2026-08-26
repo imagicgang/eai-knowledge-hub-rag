@@ -1,24 +1,24 @@
 services:
-  web:
+  frontend:
     build:
-      context: ./web
+      context: ./frontend
       args:
         NEXT_PUBLIC_API_URL: http://localhost:8080
     ports:
       - "3000:3000"
     depends_on:
-      api:
+      backend:
         condition: service_healthy
 
-  api:
-    build: ./api
+  backend:
+    build: ./backend
     environment:
-      AI_SERVICE_URL: http://ai:8000
+      AI_SERVICE_URL: http://python-ai:8000
       WEB_ORIGIN: http://localhost:3000
     ports:
       - "8080:8080"
     depends_on:
-      ai:
+      python-ai:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
@@ -26,8 +26,8 @@ services:
       timeout: 3s
       retries: 10
 
-  ai:
-    build: ./ai
+  python-ai:
+    build: ./python-ai
     ports:
       - "8000:8000"
     healthcheck:
