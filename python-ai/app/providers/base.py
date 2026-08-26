@@ -11,3 +11,7 @@ class LLMProvider(ABC):
 
     async def stream(self, question: str, context: list[str]) -> AsyncIterator[str]:
         yield await self.generate(question, context)
+
+
+class LLMProviderError(RuntimeError):
+    """Raised when the selected model provider cannot generate a response."""

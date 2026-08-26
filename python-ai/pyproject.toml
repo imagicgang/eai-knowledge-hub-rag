@@ -3,10 +3,17 @@ name = "eai-knowledge-ai"
 version = "0.1.0"
 description = "Provider-agnostic RAG service for the EAI Knowledge Hub"
 requires-python = ">=3.11"
-dependencies = ["fastapi>=0.115,<1", "uvicorn[standard]>=0.34,<1"]
+dependencies = [
+    "fastapi>=0.115,<1",
+    "httpx>=0.28,<1",
+    "openpyxl>=3.1,<4",
+    "python-multipart>=0.0.20,<1",
+    "pyyaml>=6,<7",
+    "uvicorn[standard]>=0.34,<1",
+]
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<10", "httpx>=0.28,<1", "ruff>=0.11,<1"]
+dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

@@ -2,12 +2,13 @@
 
 import { ArrowUp, Bot, Boxes, CircleHelp, Database, FileText, GitBranch, Network, PanelLeft, Plus, Search, Settings, Sparkles } from "lucide-react";
 import { FormEvent, useState } from "react";
+import { UploadPanel } from "@/components/upload-panel";
 
 type Message = { role: "user" | "assistant"; content: string; sources?: string[] };
 const suggestions = ["What systems depend on Payment Service?", "Which team owns the Order API?", "Show upstream and downstream dependencies"];
 const nav = [
-  { label: "Ask knowledge", icon: Sparkles, active: true },
-  { label: "Knowledge sources", icon: Database },
+  { label: "Ask knowledge", icon: Sparkles, view: "chat" },
+  { label: "Knowledge sources", icon: Database, view: "sources" },
   { label: "Knowledge graph", icon: Network },
   { label: "Repositories", icon: GitBranch },
 ];
@@ -16,6 +17,8 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
+  const [view, setView] = useState<"chat" | "sources">("chat");
+  const [sourceCount, setSourceCount] = useState(5);
 
   async function ask(event?: FormEvent, prompt = question) {
     event?.preventDefault();
@@ -28,11 +31,11 @@ export default function Home() {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080"}/api/v1/chat`, {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: clean }),
       });
-      if (!response.ok) throw new Error("API unavailable");
       const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? data.detail ?? "AI service unavailable");
       setMessages((current) => [...current, { role: "assistant", content: data.answer, sources: data.sources }]);
-    } catch {
-      setMessages((current) => [...current, { role: "assistant", content: "I couldn’t reach the knowledge service. Start the local stack with `docker compose up --build` and try again." }]);
+    } catch (requestError) {
+      setMessages((current) => [...current, { role: "assistant", content: requestError instanceof Error ? requestError.message : "AI service unavailable" }]);
     } finally { setLoading(false); }
   }
 
@@ -44,10 +47,10 @@ export default function Home() {
           <div><strong>Atlas</strong><span>Knowledge Hub</span></div>
           <button className="icon-button" aria-label="Collapse sidebar"><PanelLeft size={17} /></button>
         </div>
-        <button className="new-chat" onClick={() => setMessages([])}><Plus size={16} /> New conversation</button>
+        <button className="new-chat" onClick={() => { setMessages([]); setView("chat"); }}><Plus size={16} /> New conversation</button>
         <nav>
           <p className="nav-label">Workspace</p>
-          {nav.map(({ label, icon: Icon, active }) => <button className={`nav-item ${active ? "active" : ""}`} key={label}><Icon size={17} /> {label}</button>)}
+          {nav.map(({ label, icon: Icon, view: target }) => <button onClick={() => target && setView(target as "chat" | "sources")} className={`nav-item ${target === view ? "active" : ""}`} key={label}><Icon size={17} /> {label}</button>)}
         </nav>
         <div className="sidebar-footer">
           <button className="nav-item"><CircleHelp size={17} /> Help & docs</button>
@@ -58,10 +61,10 @@ export default function Home() {
 
       <section className="workspace">
         <header className="topbar">
-          <div><b>Enterprise Knowledge</b><span><i /> 12 sources indexed</span></div>
+          <div><b>{view === "sources" ? "Knowledge Sources" : "Enterprise Knowledge"}</b><span><i /> {sourceCount} sources indexed</span></div>
           <button className="search-button"><Search size={16} /> Search everything <kbd>⌘ K</kbd></button>
         </header>
-        <div className="chat-area">
+        {view === "sources" ? <UploadPanel onImported={() => setSourceCount((count) => count + 1)} onAsk={() => setView("chat")} /> : <div className="chat-area">
           {messages.length === 0 ? (
             <div className="welcome">
               <div className="orb"><Sparkles size={25} /></div>
@@ -90,10 +93,10 @@ export default function Home() {
           )}
           <form className="composer" onSubmit={ask}>
             <textarea value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); ask(); } }} placeholder="Ask about your enterprise knowledge…" aria-label="Question" rows={1} />
-            <div className="composer-actions"><span>Hybrid search <b>Vector + Graph</b></span><button disabled={!question.trim() || loading} aria-label="Send message"><ArrowUp size={18} /></button></div>
+            <div className="composer-actions"><span>Local AI <b>Qwen3 1.7B · Ollama</b></span><button disabled={!question.trim() || loading} aria-label="Send message"><ArrowUp size={18} /></button></div>
           </form>
           <p className="disclaimer">Answers are grounded in indexed sources. Always verify critical information.</p>
-        </div>
+        </div>}
       </section>
     </main>
   );

@@ -1,18 +1,18 @@
 # EAI Knowledge Hub RAG
 
-An enterprise knowledge platform for asking questions across architecture, source code, documents, and structured data. This first vertical slice includes a polished chat experience, a Go application API, and a provider-agnostic Python retrieval service.
+An enterprise knowledge platform for asking questions across architecture, source code, documents, and structured data. The local stack includes a Next.js chat experience, Go application API, provider-agnostic Python retrieval service, and a lightweight local LLM through Ollama.
 
 ## Architecture
 
 ```text
-Next.js web (:3000) → Go API (:8080) → Python AI (:8000)
+Next.js frontend (:3000) → Go backend (:8080) → Python AI (:8000) → Ollama (:11434)
 ```
 
-- `web/` — Next.js, TypeScript, and Tailwind chat interface.
-- `api/` — Go HTTP API, validation, CORS, and AI service proxy.
-- `ai/` — FastAPI retrieval orchestration and replaceable LLM providers.
+- `frontend/` — Next.js, TypeScript, and Tailwind chat interface.
+- `backend/` — Go HTTP API, validation, upload handling, and AI service proxy.
+- `python-ai/` — FastAPI ingestion, retrieval orchestration, and replaceable LLM providers.
 
-The included `MockLLMProvider` and small in-memory knowledge set make the full flow usable without credentials. They are seams for adding a vector database, graph store, and production model provider later.
+Docker uses Ollama with `qwen3:1.7b` by default. The model is approximately 1.4 GB and supports multilingual answers while keeping all prompts and knowledge local. A `MockLLMProvider` remains available for tests and offline development.
 
 ## Quick start
 
@@ -22,31 +22,35 @@ Run all services with Docker:
 docker compose up --build
 ```
 
+The first start downloads the local model and can take several minutes. Later starts reuse the `ollama-data` Docker volume.
+
 Open [http://localhost:3000](http://localhost:3000), then try “What systems depend on Payment Service?”
+
+To add your own knowledge, open **Knowledge sources** in the sidebar, choose the source type and scope, then drop a file into the upload area. The MVP supports XLSX, CSV, YAML, JSON, Draw.io/XML, Terraform, common source-code files, Markdown, and text. Parsed knowledge is persisted in the Docker volume `knowledge-data` and remains indexed after container restarts.
 
 ## Local development
 
 ```bash
 # AI service
-cd ai && python3 -m venv .venv
+cd python-ai && python3 -m venv .venv
 .venv/bin/pip install -e '.[dev]'
 .venv/bin/uvicorn app.main:app --reload
 
 # Go API (separate terminal)
-cd api && go run ./cmd/server
+cd backend && go run ./cmd/server
 
 # Frontend (separate terminal)
-cd web && npm install && npm run dev
+cd frontend && npm install && npm run dev
 ```
 
 ## Verification
 
 ```bash
-cd api && go test ./...
-cd ai && .venv/bin/pytest
-cd web && npm run lint && npm run build
+cd backend && go test ./...
+cd python-ai && .venv/bin/pytest
+cd frontend && npm run lint && npm run build
 ```
 
 ## Next slice
 
-Add file upload and deterministic YAML/JSON ingestion, persist normalized entities, then replace the demo retriever with hybrid vector and graph retrieval. Keep provider SDKs behind adapters in `ai/app/providers/`.
+Replace lexical retrieval with multilingual embeddings and a vector store, then add normalized entities and graph retrieval. Keep provider integrations behind adapters in `python-ai/app/providers/`.

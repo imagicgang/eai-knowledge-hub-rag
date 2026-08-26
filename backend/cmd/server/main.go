@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"time"
@@ -17,12 +18,59 @@ type server struct {
 
 func main() {
 	port := env("PORT", "8080")
-	s := &server{aiURL: env("AI_SERVICE_URL", "http://localhost:8000"), client: &http.Client{Timeout: 30 * time.Second}}
+	s := &server{aiURL: env("AI_SERVICE_URL", "http://localhost:8000"), client: &http.Client{Timeout: 180 * time.Second}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("POST /api/v1/chat", s.chat)
+	mux.HandleFunc("POST /api/v1/data-sources/upload", s.uploadDataSource)
 	log.Printf("Go API listening on :%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, cors(mux)))
+}
+
+func (s *server) uploadDataSource(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 20<<20)
+	if err := r.ParseMultipartForm(20 << 20); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "file is required and must not exceed 20 MB"})
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "file is required"})
+		return
+	}
+	defer file.Close()
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	part, err := writer.CreateFormFile("file", header.Filename)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not prepare upload"})
+		return
+	}
+	if _, err = io.Copy(part, file); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "could not read upload"})
+		return
+	}
+	for _, field := range []string{"source_type", "scope", "system", "schema", "version"} {
+		_ = writer.WriteField(field, r.FormValue(field))
+	}
+	_ = writer.Close()
+
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, s.aiURL+"/v1/ingest", &body)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not prepare ingestion"})
+		return
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	resp, err := s.client.Do(req)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "AI ingestion service unavailable"})
+		return
+	}
+	defer resp.Body.Close()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	_, _ = io.Copy(w, resp.Body)
 }
 
 func (s *server) health(w http.ResponseWriter, _ *http.Request) {
