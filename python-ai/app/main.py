@@ -2,13 +2,16 @@ from typing import Annotated
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
+from .embeddings import EmbeddingProviderError, create_embedding_provider
 from .ingestion import parse_file
 from .providers import LLMProviderError, create_provider
 from .retrieval import add_records, retrieve
 
 app = FastAPI(title="EAI Knowledge AI", version="0.1.0")
 provider = create_provider()
+embedding_provider = create_embedding_provider()
 
 
 class AnswerRequest(BaseModel):
@@ -33,6 +36,8 @@ async def health() -> dict[str, str]:
         "service": "ai",
         "provider": getattr(provider, "name", "mock"),
         "model": getattr(provider, "model", "template"),
+        "embedding_provider": embedding_provider.name,
+        "embedding_model": embedding_provider.model,
     }
 
 
@@ -61,7 +66,11 @@ async def ingest(
     if len(content) > 20 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File exceeds 20 MB")
     try:
-        chunks = parse_file(file.filename or "upload", content, schema_name)
+        chunks = await run_in_threadpool(
+            parse_file, file.filename or "upload", content, schema_name, embedding_provider
+        )
+    except EmbeddingProviderError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
     except (ValueError, UnicodeDecodeError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     if not chunks:

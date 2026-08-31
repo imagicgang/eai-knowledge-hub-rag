@@ -1,7 +1,7 @@
 services:
   ollama:
     image: ollama/ollama:latest
-    profiles: ["local-llm"]
+    profiles: ["local-llm", "local-embedding"]
     environment:
       OLLAMA_HOST: 0.0.0.0:11434
       OLLAMA_KEEP_ALIVE: 10m
@@ -23,6 +23,16 @@ services:
     environment:
       OLLAMA_HOST: http://ollama:11434
     command: ["pull", "qwen3:1.7b"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+  ollama-embedding-init:
+    image: ollama/ollama:latest
+    profiles: ["local-llm", "local-embedding"]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    command: ["pull", "bge-m3"]
     depends_on:
       ollama:
         condition: service_healthy
@@ -59,6 +69,9 @@ services:
     environment:
       KNOWLEDGE_INDEX_PATH: /data/knowledge-index.json
       LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-openai}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-bge-m3}
       OLLAMA_URL: http://ollama:11434
       OLLAMA_LLM_MODEL: qwen3:1.7b
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -70,6 +83,9 @@ services:
       - "8000:8000"
     depends_on:
       ollama-init:
+        condition: service_completed_successfully
+        required: false
+      ollama-embedding-init:
         condition: service_completed_successfully
         required: false
     healthcheck:
