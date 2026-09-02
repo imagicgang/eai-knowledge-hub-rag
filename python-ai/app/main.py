@@ -1,3 +1,4 @@
+import os
 from typing import Annotated
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, status
@@ -5,13 +6,25 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from .embeddings import EmbeddingProviderError, create_embedding_provider
-from .ingestion import parse_file
+from .ingestion import MAX_CHUNKS, parse_file, parse_units
 from .providers import LLMProviderError, create_provider
 from .retrieval import add_records, retrieve
+from .semantic_chunking import semantic_chunk_with_llm
 
 app = FastAPI(title="EAI Knowledge AI", version="0.1.0")
 provider = create_provider()
 embedding_provider = create_embedding_provider()
+chunking_mode = os.getenv("SEMANTIC_CHUNKING_MODE", "embedding").lower()
+if chunking_mode not in {"embedding", "llm"}:
+    raise ValueError(f"Unsupported semantic chunking mode: {chunking_mode}")
+chunking_provider = (
+    create_provider(
+        os.getenv("CHUNKING_LLM_PROVIDER", os.getenv("LLM_PROVIDER", "openai")),
+        os.getenv("CHUNKING_LLM_MODEL") or None,
+    )
+    if chunking_mode == "llm"
+    else None
+)
 
 
 class AnswerRequest(BaseModel):
@@ -38,6 +51,9 @@ async def health() -> dict[str, str]:
         "model": getattr(provider, "model", "template"),
         "embedding_provider": embedding_provider.name,
         "embedding_model": embedding_provider.model,
+        "chunking_mode": chunking_mode,
+        "chunking_provider": getattr(chunking_provider, "name", embedding_provider.name),
+        "chunking_model": getattr(chunking_provider, "model", embedding_provider.model),
     }
 
 
@@ -66,10 +82,18 @@ async def ingest(
     if len(content) > 20 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File exceeds 20 MB")
     try:
-        chunks = await run_in_threadpool(
-            parse_file, file.filename or "upload", content, schema_name, embedding_provider
-        )
+        if chunking_provider:
+            units = await run_in_threadpool(
+                parse_units, file.filename or "upload", content, schema_name
+            )
+            chunks = (await semantic_chunk_with_llm(units, chunking_provider))[:MAX_CHUNKS]
+        else:
+            chunks = await run_in_threadpool(
+                parse_file, file.filename or "upload", content, schema_name, embedding_provider
+            )
     except EmbeddingProviderError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except LLMProviderError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
     except (ValueError, UnicodeDecodeError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error

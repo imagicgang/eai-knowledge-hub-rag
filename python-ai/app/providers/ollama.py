@@ -4,13 +4,6 @@ import httpx
 
 from .base import LLMProvider, LLMProviderError
 
-SYSTEM_PROMPT = """You are the EAI Knowledge Hub assistant.
-Answer only from the supplied enterprise knowledge context.
-If the context is insufficient, clearly say that the indexed knowledge does not contain the answer.
-Never invent systems, owners, dependencies, or technical details.
-Answer in the same language as the user's question.
-Be concise, and mention the relevant source facts in your explanation."""
-
 
 class OllamaLLMProvider(LLMProvider):
     """Lightweight local LLM adapter for an Ollama-compatible HTTP server."""
@@ -20,27 +13,15 @@ class OllamaLLMProvider(LLMProvider):
         self.model = model or os.getenv("OLLAMA_LLM_MODEL", "qwen3:1.7b")
         self.name = "ollama"
 
-    async def generate(self, question: str, context: list[str]) -> str:
-        if not context:
-            return "ไม่พบข้อมูลที่เกี่ยวข้องใน Knowledge Source ที่ index ไว้ กรุณาระบุชื่อระบบ API ทีม หรือ dependency ให้ชัดเจนขึ้น"
-
-        context_parts = []
-        remaining_chars = 3600
-        for index, item in enumerate(context):
-            snippet = item[: min(1200, remaining_chars)]
-            if not snippet:
-                break
-            context_parts.append(f"[{index + 1}] {snippet}")
-            remaining_chars -= len(snippet)
-        context_block = "\n\n".join(context_parts)
+    async def complete(self, system_prompt: str, prompt: str, max_output_tokens: int = 600) -> str:
         payload = {
             "model": self.model,
             "stream": False,
             "think": False,
-            "options": {"temperature": 0, "num_ctx": 4096, "num_predict": 192},
+            "options": {"temperature": 0, "num_ctx": 8192, "num_predict": max_output_tokens},
             "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": f"Question:\n{question}\n\nIndexed knowledge context:\n{context_block}"},
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
             ],
         }
         try:

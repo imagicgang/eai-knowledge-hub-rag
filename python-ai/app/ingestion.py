@@ -26,6 +26,12 @@ def parse_file(
     embedding_provider: EmbeddingProvider | None = None,
 ) -> list[str]:
     provider = embedding_provider or HashEmbeddingProvider()
+    units = parse_units(filename, content, schema)
+    return semantic_chunk(units[:MAX_CHUNKS], provider)[:MAX_CHUNKS]
+
+
+def parse_units(filename: str, content: bytes, schema: str = "") -> list[str]:
+    """Parse deterministic structural units without choosing a chunking strategy."""
     suffix = Path(filename).suffix.lower()
     if suffix == ".xlsx":
         units = _parse_xlsx_units(content, schema)
@@ -45,7 +51,7 @@ def parse_file(
         units = _parse_document_units(content.decode("utf-8-sig"), suffix)
     else:
         raise ValueError(f"Unsupported file type: {suffix or 'unknown'}")
-    return semantic_chunk(units[:MAX_CHUNKS], provider)[:MAX_CHUNKS]
+    return units[:MAX_CHUNKS]
 
 
 def _parse_xlsx_units(content: bytes, schema: str) -> list[str]:
