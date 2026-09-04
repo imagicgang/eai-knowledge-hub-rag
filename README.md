@@ -89,8 +89,10 @@ PlantUML, Terraform, common source-code files, Markdown, and text. Parsers first
 units (rows, graph neighborhoods, functions/classes, or document sections), then embedding
 similarity merges adjacent related units into semantic chunks. `SEMANTIC_CHUNK_SIMILARITY`,
 `SEMANTIC_CHUNK_MIN_CHARS`, `SEMANTIC_CHUNK_MAX_CHARS`, and `SEMANTIC_CHUNK_MAX_UNITS` tune the
-boundaries. Parsed knowledge is persisted in the Docker volume `knowledge-data` and remains
-indexed after restarts.
+boundaries. Parsed knowledge is persisted in `data/knowledge/knowledge-index.json` on the host and
+remains indexed after container rebuilds and `docker compose down`, including `down -v`. The index
+is intentionally ignored by Git because it can contain enterprise data. Back up `data/knowledge/`
+separately when the indexed knowledge must survive deletion of the project directory.
 
 ## Local development
 

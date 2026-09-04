@@ -75,11 +75,12 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
         self.base_url = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
 
     def embed(self, texts: list[str]) -> list[list[float]]:
+        timeout = float(os.getenv("OLLAMA_EMBEDDING_TIMEOUT", "300"))
         try:
             response = httpx.post(
                 f"{self.base_url}/api/embed",
                 json={"model": self.model, "input": texts},
-                timeout=120,
+                timeout=timeout,
             )
             response.raise_for_status()
             return response.json()["embeddings"]

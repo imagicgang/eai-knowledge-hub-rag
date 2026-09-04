@@ -10,21 +10,25 @@ class AnthropicLLMProvider(LLMProvider):
 
     def __init__(self, model: str | None = None) -> None:
         self.api_key = os.getenv("ANTHROPIC_API_KEY", "")
-        self.model = model or os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5")
+        self.workspace_id = os.getenv("ANTHROPIC_WORKSPACE_ID", "")
+        self.model = model or os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
         self.base_url = os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com/v1").rstrip("/")
 
     async def complete(self, system_prompt: str, prompt: str, max_output_tokens: int = 600) -> str:
         if not self.api_key:
             raise LLMProviderError("ANTHROPIC_API_KEY is not configured")
+        headers = {
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        }
+        if self.workspace_id:
+            headers["anthropic-workspace-id"] = self.workspace_id
         try:
             async with httpx.AsyncClient(timeout=120) as client:
                 response = await client.post(
                     f"{self.base_url}/messages",
-                    headers={
-                        "x-api-key": self.api_key,
-                        "anthropic-version": "2023-06-01",
-                        "content-type": "application/json",
-                    },
+                    headers=headers,
                     json={
                         "model": self.model,
                         "system": system_prompt,
@@ -35,6 +39,10 @@ class AnthropicLLMProvider(LLMProvider):
                 )
                 response.raise_for_status()
                 answer = self._extract_text(response.json())
+        except httpx.HTTPStatusError as error:
+            raise LLMProviderError(
+                f"Anthropic API request failed: {error}. Response: {error.response.text}"
+            ) from error
         except (httpx.HTTPError, KeyError, TypeError, ValueError) as error:
             raise LLMProviderError(f"Anthropic API request failed: {error}") from error
         if not answer:

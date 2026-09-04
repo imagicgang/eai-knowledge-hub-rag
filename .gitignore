@@ -11,3 +11,7 @@ node_modules/
 coverage/
 bin/
 /api/server
+
+# Local RAG index. Keep the directory, but never commit enterprise knowledge.
+/data/knowledge/*
+!/data/knowledge/.gitkeep

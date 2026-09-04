@@ -79,17 +79,21 @@ services:
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-openai}
       OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
       OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-bge-m3}
+      OLLAMA_EMBEDDING_TIMEOUT: ${OLLAMA_EMBEDDING_TIMEOUT:-300}
       OLLAMA_URL: http://ollama:11434
       OLLAMA_LLM_MODEL: qwen3:1.7b
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.6-luna}
       OPENAI_REASONING_EFFORT: ${OPENAI_REASONING_EFFORT:-none}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-haiku-4-5}
+      ANTHROPIC_WORKSPACE_ID: ${ANTHROPIC_WORKSPACE_ID:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-haiku-4-5-20251001}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
     volumes:
-      - knowledge-data:/data
+      # Keep uploaded/indexed knowledge on the host so it survives container and
+      # Compose-volume removal (including `docker compose down -v`).
+      - ./data/knowledge:/data
     ports:
       - "8000:8000"
     depends_on:
@@ -106,5 +110,4 @@ services:
       retries: 10
 
 volumes:
-  knowledge-data:
   ollama-data:
