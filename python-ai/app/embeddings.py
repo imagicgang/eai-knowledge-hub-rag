@@ -49,20 +49,55 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         self.model = model or os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
         self.api_key = api_key or os.getenv("OPENAI_API_KEY", "")
         self.base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+        # A byte count is a conservative upper bound for token count and avoids
+        # requiring a model-specific tokenizer just to form API request batches.
+        self.max_batch_bytes = int(os.getenv("OPENAI_EMBEDDING_BATCH_MAX_BYTES", "200000"))
+
+    def _batches(self, texts: list[str]) -> list[list[str]]:
+        if self.max_batch_bytes <= 0:
+            raise EmbeddingProviderError("OPENAI_EMBEDDING_BATCH_MAX_BYTES must be positive")
+        batches: list[list[str]] = []
+        batch: list[str] = []
+        batch_size = 0
+        for text in texts:
+            text_size = len(text.encode("utf-8"))
+            if text_size > self.max_batch_bytes:
+                raise EmbeddingProviderError(
+                    f"One embedding input is {text_size} bytes, exceeding "
+                    f"OPENAI_EMBEDDING_BATCH_MAX_BYTES={self.max_batch_bytes}"
+                )
+            if batch and batch_size + text_size > self.max_batch_bytes:
+                batches.append(batch)
+                batch, batch_size = [], 0
+            batch.append(text)
+            batch_size += text_size
+        if batch:
+            batches.append(batch)
+        return batches
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         if not self.api_key:
             raise EmbeddingProviderError("OPENAI_API_KEY is required for semantic chunking")
         try:
-            response = httpx.post(
-                f"{self.base_url}/embeddings",
-                headers={"Authorization": f"Bearer {self.api_key}"},
-                json={"model": self.model, "input": texts, "encoding_format": "float"},
-                timeout=60,
-            )
-            response.raise_for_status()
-            data = sorted(response.json()["data"], key=lambda item: item["index"])
-            return [item["embedding"] for item in data]
+            vectors: list[list[float]] = []
+            for batch in self._batches(texts):
+                response = httpx.post(
+                    f"{self.base_url}/embeddings",
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    json={"model": self.model, "input": batch, "encoding_format": "float"},
+                    timeout=60,
+                )
+                response.raise_for_status()
+                data = sorted(response.json()["data"], key=lambda item: item["index"])
+                if len(data) != len(batch):
+                    raise EmbeddingProviderError("OpenAI returned an unexpected number of embeddings")
+                vectors.extend(item["embedding"] for item in data)
+            return vectors
+        except httpx.HTTPStatusError as error:
+            detail = error.response.text[:1_000].strip()
+            raise EmbeddingProviderError(
+                f"OpenAI embedding request failed ({error.response.status_code}): {detail}"
+            ) from error
         except (httpx.HTTPError, KeyError, TypeError, ValueError) as error:
             raise EmbeddingProviderError(f"OpenAI embedding request failed: {error}") from error
 
