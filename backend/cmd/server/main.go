@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"mime/multipart"
@@ -18,7 +20,7 @@ type server struct {
 
 func main() {
 	port := env("PORT", "8080")
-	s := &server{aiURL: env("AI_SERVICE_URL", "http://localhost:8000"), client: &http.Client{Timeout: 180 * time.Second}}
+	s := &server{aiURL: env("AI_SERVICE_URL", "http://localhost:8000"), client: &http.Client{Timeout: durationEnv("AI_REQUEST_TIMEOUT", 10*time.Minute)}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("POST /api/v1/chat", s.chat)
@@ -28,6 +30,7 @@ func main() {
 }
 
 func (s *server) uploadDataSource(w http.ResponseWriter, r *http.Request) {
+	startedAt := time.Now()
 	r.Body = http.MaxBytesReader(w, r.Body, 20<<20)
 	if err := r.ParseMultipartForm(20 << 20); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "file is required and must not exceed 20 MB"})
@@ -39,6 +42,7 @@ func (s *server) uploadDataSource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
+	log.Printf("ingestion started: file=%q", header.Filename)
 
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
@@ -64,10 +68,17 @@ func (s *server) uploadDataSource(w http.ResponseWriter, r *http.Request) {
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	resp, err := s.client.Do(req)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			log.Printf("ingestion timed out after %s: file=%q: %v", time.Since(startedAt).Round(time.Millisecond), header.Filename, err)
+			writeJSON(w, http.StatusGatewayTimeout, map[string]string{"error": "AI ingestion timed out; try embedding chunking or a smaller file"})
+			return
+		}
+		log.Printf("AI ingestion service unavailable: file=%q: %v", header.Filename, err)
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "AI ingestion service unavailable"})
 		return
 	}
 	defer resp.Body.Close()
+	log.Printf("ingestion finished: file=%q status=%d duration=%s", header.Filename, resp.StatusCode, time.Since(startedAt).Round(time.Millisecond))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
@@ -130,4 +141,17 @@ func env(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func durationEnv(key string, fallback time.Duration) time.Duration {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	duration, err := time.ParseDuration(value)
+	if err != nil || duration <= 0 {
+		log.Printf("invalid %s=%q; using %s", key, value, fallback)
+		return fallback
+	}
+	return duration
 }

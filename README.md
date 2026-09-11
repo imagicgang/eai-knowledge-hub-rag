@@ -80,6 +80,8 @@ token-per-minute bursts. Batches are classified independently, so `CHUNKING_LLM_
 so the model can judge whether a topic boundary falls right at the batch seam instead of guessing
 blind at every edge. OpenAI HTTP 429 responses are retried automatically using the provider's
 rate-limit reset headers; `OPENAI_MAX_RETRY_ATTEMPTS` controls the retry limit.
+Large uploads with LLM-assisted chunking can take several minutes. The Go API allows 10 minutes by
+default; set `AI_REQUEST_TIMEOUT` in `.env` (for example, `15m`) when a longer request is expected.
 
 Open [http://localhost:3000](http://localhost:3000), then try “What systems depend on Payment Service?”
 
