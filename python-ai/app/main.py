@@ -1,4 +1,6 @@
+import asyncio
 import os
+from contextlib import asynccontextmanager
 from typing import Annotated
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, status
@@ -8,10 +10,9 @@ from starlette.concurrency import run_in_threadpool
 from .embeddings import EmbeddingProviderError, create_embedding_provider
 from .ingestion import MAX_CHUNKS, parse_file, parse_units
 from .providers import LLMProviderError, create_provider
-from .retrieval import add_records, retrieve
+from .retrieval import SurrealError, add_records, ensure_schema, retrieve, search, seed_demo_data
 from .semantic_chunking import semantic_chunk_with_llm
 
-app = FastAPI(title="EAI Knowledge AI", version="0.1.0")
 provider = create_provider()
 embedding_provider = create_embedding_provider()
 chunking_mode = os.getenv("SEMANTIC_CHUNKING_MODE", "embedding").lower()
@@ -25,6 +26,26 @@ chunking_provider = (
     if chunking_mode == "llm"
     else None
 )
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    for attempt in range(10):
+        try:
+            await ensure_schema()
+            break
+        except SurrealError:
+            if attempt == 9:
+                raise
+            await asyncio.sleep(1)
+    try:
+        await seed_demo_data(embedding_provider)
+    except (EmbeddingProviderError, SurrealError):
+        pass  # Demo seeding is a convenience; a down embedding backend must not block startup.
+    yield
+
+
+app = FastAPI(title="EAI Knowledge AI", version="0.1.0", lifespan=lifespan)
 
 
 class AnswerRequest(BaseModel):
@@ -42,6 +63,11 @@ class IngestResponse(BaseModel):
     message: str
 
 
+class SearchRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=2000)
+    limit: int = Field(default=8, ge=1, le=50)
+
+
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {
@@ -54,17 +80,33 @@ async def health() -> dict[str, str]:
         "chunking_mode": chunking_mode,
         "chunking_provider": getattr(chunking_provider, "name", embedding_provider.name),
         "chunking_model": getattr(chunking_provider, "model", embedding_provider.model),
+        "storage": "surrealdb",
     }
 
 
 @app.post("/v1/answer", response_model=AnswerResponse)
 async def answer(request: AnswerRequest) -> AnswerResponse:
-    records = retrieve(request.message)
+    try:
+        vector = (await run_in_threadpool(embedding_provider.embed, [request.message]))[0]
+        records = await retrieve(request.message, vector)
+    except (EmbeddingProviderError, SurrealError) as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
     try:
         response = await provider.generate(request.message, [record.text for record in records])
     except LLMProviderError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
     return AnswerResponse(answer=response, sources=list(dict.fromkeys(record.source for record in records)))
+
+
+@app.post("/v1/knowledge/search")
+async def knowledge_search(request: SearchRequest) -> dict:
+    try:
+        vector = (await run_in_threadpool(embedding_provider.embed, [request.query]))[0]
+        return await search(request.query, vector, request.limit)
+    except EmbeddingProviderError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except SurrealError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
 
 
 @app.post("/v1/ingest", response_model=IngestResponse, status_code=status.HTTP_201_CREATED)
@@ -100,5 +142,11 @@ async def ingest(
     if not chunks:
         raise HTTPException(status_code=422, detail="No indexable knowledge was found in this file")
     metadata = f"Source type: {source_type}. Scope: {scope}. System: {system or 'unspecified'}. Version: {version or 'unspecified'}."
-    count = add_records(file.filename or "upload", chunks, metadata)
+    try:
+        embeddings = await run_in_threadpool(embedding_provider.embed, chunks)
+        count = await add_records(file.filename or "upload", chunks, embeddings, metadata)
+    except EmbeddingProviderError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except SurrealError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
     return IngestResponse(source=file.filename or "upload", chunks=count, message=f"Indexed {count} knowledge chunks")

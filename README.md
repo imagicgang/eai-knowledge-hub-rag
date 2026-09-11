@@ -91,10 +91,14 @@ PlantUML, Terraform, common source-code files, Markdown, and text. Parsers first
 units (rows, graph neighborhoods, functions/classes, or document sections), then embedding
 similarity merges adjacent related units into semantic chunks. `SEMANTIC_CHUNK_SIMILARITY`,
 `SEMANTIC_CHUNK_MIN_CHARS`, `SEMANTIC_CHUNK_MAX_CHARS`, and `SEMANTIC_CHUNK_MAX_UNITS` tune the
-boundaries. Parsed knowledge is persisted in `data/knowledge/knowledge-index.json` on the host and
-remains indexed after container rebuilds and `docker compose down`, including `down -v`. The index
-is intentionally ignored by Git because it can contain enterprise data. Back up `data/knowledge/`
-separately when the indexed knowledge must survive deletion of the project directory.
+boundaries. Chunks and their embeddings are persisted in SurrealDB (the `surrealdb` service), which
+also stores the knowledge graph: `has_chunk` edges link each source to its chunks, and `related_to`
+edges link semantically similar chunks to each other so results can be explored as a graph, not just
+a ranked list. SurrealDB data lives in the `surreal-data` Docker volume and survives container
+rebuilds and `docker compose down` (but not `down -v`). `SURREAL_URL`, `SURREAL_NS`, `SURREAL_DB`,
+`SURREAL_USER`, and `SURREAL_PASS` configure the connection. Open **Vector & Graph RAG** in the
+sidebar to search the indexed knowledge by meaning and see the matching chunks, their sources, and
+the graph edges between them.
 
 ## Local development
 
