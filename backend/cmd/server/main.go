@@ -25,6 +25,7 @@ func main() {
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("POST /api/v1/chat", s.chat)
 	mux.HandleFunc("POST /api/v1/data-sources/upload", s.uploadDataSource)
+	mux.HandleFunc("POST /api/v1/knowledge/search", s.knowledgeSearch)
 	log.Printf("Go API listening on :%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, cors(mux)))
 }
@@ -102,6 +103,36 @@ func (s *server) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, s.aiURL+"/v1/answer", bytes.NewReader(body))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "request failed"})
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := s.client.Do(req)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "AI service unavailable"})
+		return
+	}
+	defer resp.Body.Close()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	_, _ = io.Copy(w, resp.Body)
+}
+
+func (s *server) knowledgeSearch(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+	var payload struct {
+		Query string `json:"query"`
+	}
+	if json.Unmarshal(body, &payload) != nil || payload.Query == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "query is required"})
+		return
+	}
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, s.aiURL+"/v1/knowledge/search", bytes.NewReader(body))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "request failed"})
 		return

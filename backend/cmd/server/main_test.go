@@ -64,3 +64,34 @@ func TestChatRequiresMessage(t *testing.T) {
 		t.Fatalf("expected 400, got %d", w.Code)
 	}
 }
+
+func TestKnowledgeSearchRequiresQuery(t *testing.T) {
+	s := &server{}
+	w := httptest.NewRecorder()
+	s.knowledgeSearch(w, httptest.NewRequest(http.MethodPost, "/api/v1/knowledge/search", strings.NewReader(`{}`)))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestKnowledgeSearchForwardsQueryToAI(t *testing.T) {
+	ai := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/knowledge/search" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		body, _ := io.ReadAll(r.Body)
+		if !strings.Contains(string(body), "Payment Service") {
+			t.Fatalf("unexpected body: %s", body)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"matches": []any{}, "nodes": []any{}, "edges": []any{}})
+	}))
+	defer ai.Close()
+
+	s := &server{aiURL: ai.URL, client: ai.Client()}
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/knowledge/search", strings.NewReader(`{"query":"Payment Service"}`))
+	s.knowledgeSearch(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
