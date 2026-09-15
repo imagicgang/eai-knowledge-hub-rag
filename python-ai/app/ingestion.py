@@ -15,8 +15,14 @@ from .semantic_chunking import semantic_chunk
 
 MAX_CHUNKS = 500
 CODE_SUFFIXES = {
-    ".go", ".py", ".ts", ".tsx", ".js", ".java", ".tf", ".cs", ".kt", ".cpp", ".rs", ".sql"
+    ".go", ".py", ".ts", ".tsx", ".js", ".jsx", ".java", ".tf", ".tfvars", ".hcl", ".cs", ".kt",
+    ".cpp", ".cc", ".c", ".h", ".hpp", ".rs", ".sql", ".rb", ".php", ".swift", ".scala", ".sh",
+    ".bash", ".zsh", ".ps1", ".vue", ".lua", ".pl", ".groovy", ".dart",
 }
+CONFIG_SUFFIXES = {".ini", ".toml", ".cfg", ".conf", ".properties", ".env"}
+DOCUMENT_SUFFIXES = {".md", ".txt", ".rst", ".adoc"}
+MARKUP_SUFFIXES = {".html", ".htm"}
+NAMED_CODE_FILES = {"dockerfile", "makefile", "jenkinsfile", "vagrantfile"}
 
 
 def parse_file(
@@ -32,7 +38,9 @@ def parse_file(
 
 def parse_units(filename: str, content: bytes, schema: str = "") -> list[str]:
     """Parse deterministic structural units without choosing a chunking strategy."""
+    base_name = Path(filename).name.lower()
     suffix = Path(filename).suffix.lower()
+    name_root = base_name.split(".")[0]
     if suffix == ".xlsx":
         units = _parse_xlsx_units(content, schema)
     elif suffix == ".csv":
@@ -41,14 +49,24 @@ def parse_units(filename: str, content: bytes, schema: str = "") -> list[str]:
         units = _parse_structured_units(yaml.safe_load(content.decode("utf-8-sig")))
     elif suffix == ".json":
         units = _parse_structured_units(json.loads(content.decode("utf-8-sig")))
-    elif suffix in {".drawio", ".xml"}:
+    elif suffix == ".drawio":
         units = _parse_drawio_units(content)
+    elif suffix == ".xml":
+        units = _parse_drawio_units(content) or _parse_generic_xml_units(content)
     elif suffix in {".puml", ".plantuml"}:
         units = _parse_plantuml_units(content.decode("utf-8-sig"))
+    elif suffix in CONFIG_SUFFIXES:
+        units = _parse_config_units(content.decode("utf-8-sig"))
+    elif suffix in MARKUP_SUFFIXES:
+        units = _parse_html_units(content.decode("utf-8-sig"))
     elif suffix in CODE_SUFFIXES:
         units = _parse_code_units(content.decode("utf-8-sig"), suffix)
-    elif suffix in {".md", ".txt"}:
+    elif suffix in DOCUMENT_SUFFIXES:
         units = _parse_document_units(content.decode("utf-8-sig"), suffix)
+    elif not suffix and name_root in NAMED_CODE_FILES:
+        units = _parse_generic_code_units(content.decode("utf-8-sig"))
+    elif re.match(r"^\.env(\..+)?$", base_name):
+        units = _parse_config_units(content.decode("utf-8-sig"))
     else:
         raise ValueError(f"Unsupported file type: {suffix or 'unknown'}")
     return units[:MAX_CHUNKS]
@@ -131,6 +149,49 @@ def _parse_drawio_units(content: bytes) -> list[str]:
         for cell_id, label in entities.items()
     ]
     return units + standalone
+
+
+def _xml_element_to_obj(element: ElementTree.Element) -> object:
+    obj: dict[str, object] = {f"@{key}": value for key, value in element.attrib.items()}
+    grouped: dict[str, list[object]] = {}
+    for child in element:
+        grouped.setdefault(child.tag, []).append(_xml_element_to_obj(child))
+    for tag, items in grouped.items():
+        obj[tag] = items if len(items) > 1 else items[0]
+    text = (element.text or "").strip()
+    if text:
+        obj["#text"] = text
+    return obj or text
+
+
+def _parse_generic_xml_units(content: bytes) -> list[str]:
+    root = ElementTree.fromstring(content)
+    return _parse_structured_units(_xml_element_to_obj(root), path=root.tag)
+
+
+def _parse_config_units(value: str) -> list[str]:
+    section = "root"
+    units: list[str] = []
+    for raw_line in value.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith(("#", ";")):
+            continue
+        section_match = re.match(r"^\[(.+)]$", line)
+        if section_match:
+            section = section_match.group(1).strip()
+            continue
+        if "=" in line or ":" in line:
+            units.append(f"Section: {section}. {line}")
+    return units
+
+
+def _parse_html_units(value: str) -> list[str]:
+    value = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", value)
+    value = re.sub(r"(?i)</(p|div|li|h[1-6]|tr|section|article)\s*>", "\n\n", value)
+    value = re.sub(r"(?i)<br\s*/?>", "\n", value)
+    text = html.unescape(re.sub(r"<[^>]+>", " ", value))
+    text = re.sub(r"[ \t]+", " ", text)
+    return [block.strip() for block in re.split(r"\n\s*\n", text) if block.strip()]
 
 
 def _parse_plantuml_units(value: str) -> list[str]:

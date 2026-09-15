@@ -1,0 +1,63 @@
+import pytest
+
+from app.ingestion import parse_units
+
+
+def test_parses_dockerfile_by_name_with_no_extension() -> None:
+    content = b"FROM python:3.11\nRUN pip install fastapi\nCMD [\"python\", \"app.py\"]\n"
+    units = parse_units("Dockerfile", content)
+    assert units
+    assert any("FROM python" in unit for unit in units)
+
+
+def test_parses_terraform_variable_file() -> None:
+    content = b'variable "region" {\n  default = "us-east-1"\n}\n\nresource "aws_s3_bucket" "data" {\n  bucket = "example"\n}\n'
+    units = parse_units("main.tfvars", content)
+    assert any("region" in unit for unit in units)
+    assert any("aws_s3_bucket" in unit for unit in units)
+
+
+def test_parses_ini_style_config_with_sections() -> None:
+    content = b"[database]\nhost = localhost\nport = 5432\n\n# comment line\n[cache]\nttl=60\n"
+    units = parse_units("service.conf", content)
+    assert any("Section: database" in unit and "host = localhost" in unit for unit in units)
+    assert any("Section: cache" in unit and "ttl=60" in unit for unit in units)
+
+
+def test_parses_env_file() -> None:
+    content = b"API_KEY=secret\nDEBUG=true\n"
+    units = parse_units(".env", content)
+    assert any("API_KEY=secret" in unit for unit in units)
+
+
+def test_parses_html_document_by_block() -> None:
+    content = b"<html><body><h1>Title</h1><p>First paragraph.</p><p>Second paragraph.</p></body></html>"
+    units = parse_units("page.html", content)
+    assert any("Title" in unit for unit in units)
+    assert any("First paragraph." in unit for unit in units)
+    assert any("Second paragraph." in unit for unit in units)
+
+
+def test_falls_back_to_generic_xml_when_not_drawio() -> None:
+    content = b"<catalog><service><name>Billing</name><owner>Finance</owner></service></catalog>"
+    units = parse_units("service-catalog.xml", content)
+    assert any("Billing" in unit for unit in units)
+    assert any("Finance" in unit for unit in units)
+
+
+def test_drawio_file_still_uses_diagram_parser() -> None:
+    content = (
+        b'<mxGraphModel><root>'
+        b'<mxCell id="1" vertex="1" value="Order Service"/>'
+        b'<mxCell id="2" vertex="1" value="Payment Service"/>'
+        b'<mxCell id="3" edge="1" source="1" target="2" value="calls"/>'
+        b"</root></mxGraphModel>"
+    )
+    units = parse_units("flow.drawio", content)
+    assert any("Order Service" in unit for unit in units)
+    assert any("Relationship: Order Service -> Payment Service" in unit for unit in units)
+
+
+def test_unsupported_extension_still_raises() -> None:
+    with pytest.raises(ValueError):
+        parse_units("image.png", b"\x89PNG\r\n")
