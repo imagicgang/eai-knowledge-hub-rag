@@ -159,6 +159,39 @@ async def add_records(
     return len(chunks)
 
 
+async def list_sources() -> list[dict]:
+    sources = (await _query("SELECT name, metadata, updated_at FROM source ORDER BY updated_at DESC;"))[0] or []
+    counts = (await _query("SELECT source, count() AS chunks FROM chunk GROUP BY source;"))[0] or []
+    chunk_counts = {row["source"]: row["chunks"] for row in counts}
+    return [
+        {
+            "name": row["name"],
+            "metadata": row.get("metadata", ""),
+            "updated_at": row.get("updated_at"),
+            "chunks": chunk_counts.get(row["name"], 0),
+        }
+        for row in sources
+    ]
+
+
+async def delete_source(source: str) -> int:
+    """Remove a source and its chunks/graph edges. No raw file is stored, so this only drops indexed knowledge."""
+    source_thing = f'(type::thing("source", {_string(source)}))'
+    existing = await _query(f"SELECT id FROM {source_thing};")
+    if not existing or not existing[0]:
+        return 0
+    chunk_rows = await _query(f"SELECT VALUE id FROM chunk WHERE source = {_string(source)};")
+    chunk_ids = chunk_rows[0] if chunk_rows else []
+    if chunk_ids:
+        id_list = _id_list(chunk_ids)
+        await _query(
+            f"DELETE related_to WHERE in IN {id_list} OR out IN {id_list};"
+            f"DELETE has_chunk WHERE out IN {id_list};"
+        )
+    await _query(f"DELETE chunk WHERE source = {_string(source)}; DELETE {source_thing};")
+    return len(chunk_ids)
+
+
 async def search(question: str, vector: list[float], limit: int = 8) -> dict:
     """Semantic search over stored chunks plus the graph edges connecting the hits.
 

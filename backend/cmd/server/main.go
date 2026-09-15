@@ -9,7 +9,9 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -25,6 +27,8 @@ func main() {
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("POST /api/v1/chat", s.chat)
 	mux.HandleFunc("POST /api/v1/data-sources/upload", s.uploadDataSource)
+	mux.HandleFunc("GET /api/v1/data-sources", s.listDataSources)
+	mux.HandleFunc("DELETE /api/v1/data-sources/{name...}", s.deleteDataSource)
 	mux.HandleFunc("POST /api/v1/knowledge/search", s.knowledgeSearch)
 	log.Printf("Go API listening on :%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, cors(mux)))
@@ -83,6 +87,53 @@ func (s *server) uploadDataSource(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
+}
+
+func (s *server) listDataSources(w http.ResponseWriter, r *http.Request) {
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, s.aiURL+"/v1/sources", nil)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "request failed"})
+		return
+	}
+	resp, err := s.client.Do(req)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "AI service unavailable"})
+		return
+	}
+	defer resp.Body.Close()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	_, _ = io.Copy(w, resp.Body)
+}
+
+func (s *server) deleteDataSource(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "source name is required"})
+		return
+	}
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodDelete, s.aiURL+"/v1/sources/"+escapePathSegments(name), nil)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "request failed"})
+		return
+	}
+	resp, err := s.client.Do(req)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "AI service unavailable"})
+		return
+	}
+	defer resp.Body.Close()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	_, _ = io.Copy(w, resp.Body)
+}
+
+func escapePathSegments(path string) string {
+	segments := strings.Split(path, "/")
+	for i, segment := range segments {
+		segments[i] = url.PathEscape(segment)
+	}
+	return strings.Join(segments, "/")
 }
 
 func (s *server) health(w http.ResponseWriter, _ *http.Request) {
@@ -153,7 +204,7 @@ func cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", env("WEB_ORIGIN", "http://localhost:3000"))
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return

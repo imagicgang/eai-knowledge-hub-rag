@@ -56,6 +56,42 @@ func TestUploadForwardsFileToAI(t *testing.T) {
 	}
 }
 
+func TestListDataSourcesForwardsToAI(t *testing.T) {
+	ai := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/sources" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"sources": []any{map[string]any{"name": "services.csv", "chunks": 3}}})
+	}))
+	defer ai.Close()
+
+	s := &server{aiURL: ai.URL, client: ai.Client()}
+	w := httptest.NewRecorder()
+	s.listDataSources(w, httptest.NewRequest(http.MethodGet, "/api/v1/data-sources", nil))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "services.csv") {
+		t.Fatalf("unexpected response: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestDeleteDataSourceForwardsNameToAI(t *testing.T) {
+	ai := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete || r.URL.Path != "/v1/sources/architecture/payment.drawio" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"source": "architecture/payment.drawio", "deleted_chunks": 2})
+	}))
+	defer ai.Close()
+
+	s := &server{aiURL: ai.URL, client: ai.Client()}
+	mux := http.NewServeMux()
+	mux.HandleFunc("DELETE /api/v1/data-sources/{name...}", s.deleteDataSource)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/api/v1/data-sources/architecture/payment.drawio", nil))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "deleted_chunks") {
+		t.Fatalf("unexpected response: %d %s", w.Code, w.Body.String())
+	}
+}
+
 func TestChatRequiresMessage(t *testing.T) {
 	s := &server{}
 	w := httptest.NewRecorder()

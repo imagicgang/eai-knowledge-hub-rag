@@ -62,7 +62,7 @@ export function UploadPanel({ onImported, onAsk }: UploadPanelProps) {
   }
 
   return (
-    <div className="upload-page">
+    <>
       <div className="upload-heading"><div><p className="eyebrow">KNOWLEDGE INGESTION</p><h1>Add a knowledge source</h1><p>Import enterprise data and make it searchable from your knowledge workspace.</p></div><div className="pipeline"><span className="done"><Check size={12} /> Upload</span><b /><span>Parse</span><b /><span>Index</span></div></div>
       <div className="upload-layout">
         <form className="upload-form" onSubmit={submit}>
@@ -72,6 +72,6 @@ export function UploadPanel({ onImported, onAsk }: UploadPanelProps) {
         </form>
         <aside className="import-queue"><div className="queue-title"><GitBranch size={17} /><div><b>Import queue</b><small>Current upload session</small></div></div>{!file ? <div className="queue-empty"><FileSpreadsheet size={25} /><p>No files waiting</p><small>Choose a source and add a file to begin.</small></div> : <div className={`queue-file ${status}`}><div className="file-type">{file.name.split(".").pop()?.toUpperCase()}</div><div><b>{file.name}</b><small>{status === "success" ? `${result?.chunks ?? 0} chunks indexed` : status === "uploading" ? "Parsing and indexing…" : `${(file.size / 1024).toFixed(1)} KB · ${selectedType.label}`}</small></div>{status === "success" ? <Check size={17} /> : <button onClick={() => setFile(null)}><Trash2 size={15} /></button>}</div>}{status === "error" && <p className="upload-error">{error}</p>}{status === "success" && <div className="upload-success"><Check size={16} /><div><b>Knowledge source ready</b><span>{result?.message}</span><button onClick={onAsk}>Ask knowledge now →</button></div></div>}<div className="queue-stats"><span><b>{status === "success" ? 1 : 0}</b>Done</span><span><b>{status === "uploading" ? 1 : 0}</b>Processing</span></div></aside>
       </div>
-    </div>
+    </>
   );
 }

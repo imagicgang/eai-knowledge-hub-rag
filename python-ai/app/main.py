@@ -10,7 +10,16 @@ from starlette.concurrency import run_in_threadpool
 from .embeddings import EmbeddingProviderError, create_embedding_provider
 from .ingestion import MAX_CHUNKS, parse_file, parse_units
 from .providers import LLMProviderError, create_provider
-from .retrieval import SurrealError, add_records, ensure_schema, retrieve, search, seed_demo_data
+from .retrieval import (
+    SurrealError,
+    add_records,
+    delete_source,
+    ensure_schema,
+    list_sources,
+    retrieve,
+    search,
+    seed_demo_data,
+)
 from .semantic_chunking import semantic_chunk_with_llm
 
 provider = create_provider()
@@ -150,3 +159,22 @@ async def ingest(
     except SurrealError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
     return IngestResponse(source=file.filename or "upload", chunks=count, message=f"Indexed {count} knowledge chunks")
+
+
+@app.get("/v1/sources")
+async def list_knowledge_sources() -> dict:
+    try:
+        return {"sources": await list_sources()}
+    except SurrealError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+@app.delete("/v1/sources/{name:path}")
+async def delete_knowledge_source(name: str) -> dict:
+    try:
+        deleted = await delete_source(name)
+    except SurrealError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    if deleted == 0:
+        raise HTTPException(status_code=404, detail="Source not found")
+    return {"source": name, "deleted_chunks": deleted}
