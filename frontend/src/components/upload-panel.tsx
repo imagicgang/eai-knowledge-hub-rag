@@ -1,6 +1,6 @@
 "use client";
 
-import { Braces, Check, CloudUpload, Code2, FileCode2, FileSpreadsheet, FileText, GitBranch, Globe, LoaderCircle, Network, RotateCcw, ServerCog, Settings2, Trash2, Workflow } from "lucide-react";
+import { Braces, Check, CloudUpload, Code2, FileCode2, FileSpreadsheet, FileText, GitBranch, Globe, LoaderCircle, Network, Presentation, RotateCcw, ServerCog, Settings2, Trash2, Workflow } from "lucide-react";
 import { ChangeEvent, DragEvent, FormEvent, useRef, useState } from "react";
 
 type UploadPanelProps = { onImported: () => void; onAsk: () => void };
@@ -21,7 +21,8 @@ const sourceTypes = [
   },
   { id: "config", label: "Config Files", hint: "INI, TOML, ENV, CONF", icon: Settings2, accept: ".ini,.toml,.cfg,.conf,.properties,.env" },
   { id: "diagram", label: "PlantUML", hint: "PUML", icon: Workflow, accept: ".puml,.plantuml" },
-  { id: "docs", label: "Documentation", hint: "MD, TXT, RST, ADOC", icon: FileText, accept: ".md,.txt,.rst,.adoc" },
+  { id: "docs", label: "Documentation", hint: "MD, TXT, RST, ADOC, DOCX", icon: FileText, accept: ".md,.txt,.rst,.adoc,.docx" },
+  { id: "presentation", label: "Presentations", hint: "PPTX", icon: Presentation, accept: ".pptx" },
   { id: "web", label: "Web / Markup", hint: "HTML", icon: Globe, accept: ".html,.htm" },
 ];
 
