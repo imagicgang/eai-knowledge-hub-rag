@@ -1,6 +1,6 @@
 "use client";
 
-import { Braces, Check, CloudUpload, Code2, FileCode2, FileSpreadsheet, GitBranch, LoaderCircle, Network, RotateCcw, ServerCog, Trash2 } from "lucide-react";
+import { Braces, Check, CloudUpload, Code2, FileCode2, FileSpreadsheet, FileText, GitBranch, Globe, LoaderCircle, Network, RotateCcw, ServerCog, Settings2, Trash2, Workflow } from "lucide-react";
 import { ChangeEvent, DragEvent, FormEvent, useRef, useState } from "react";
 
 type UploadPanelProps = { onImported: () => void; onAsk: () => void };
@@ -10,8 +10,19 @@ const sourceTypes = [
   { id: "cmdb", label: "CMDB", hint: "XLSX, CSV", icon: ServerCog, accept: ".xlsx,.csv" },
   { id: "eai", label: "EAI Diagram", hint: "DRAW.IO, XML", icon: Network, accept: ".drawio,.xml" },
   { id: "catalog", label: "Service Catalog", hint: "YAML, JSON", icon: Braces, accept: ".yaml,.yml,.json" },
-  { id: "iac", label: "Infrastructure", hint: "YAML, JSON, TF", icon: FileCode2, accept: ".yaml,.yml,.json,.tf" },
-  { id: "code", label: "Source Code", hint: "SOURCE FILES", icon: Code2, accept: ".go,.py,.ts,.tsx,.js,.java,.md,.txt" },
+  { id: "iac", label: "Infrastructure", hint: "YAML, JSON, TF, HCL", icon: FileCode2, accept: ".yaml,.yml,.json,.tf,.tfvars,.hcl" },
+  {
+    id: "code",
+    label: "Source Code",
+    hint: "SOURCE FILES",
+    icon: Code2,
+    accept:
+      ".go,.py,.ts,.tsx,.js,.jsx,.java,.cs,.kt,.cpp,.cc,.c,.h,.hpp,.rs,.sql,.rb,.php,.swift,.scala,.sh,.bash,.zsh,.ps1,.vue,.lua,.pl,.groovy,.dart,Dockerfile,Makefile,Jenkinsfile",
+  },
+  { id: "config", label: "Config Files", hint: "INI, TOML, ENV, CONF", icon: Settings2, accept: ".ini,.toml,.cfg,.conf,.properties,.env" },
+  { id: "diagram", label: "PlantUML", hint: "PUML", icon: Workflow, accept: ".puml,.plantuml" },
+  { id: "docs", label: "Documentation", hint: "MD, TXT, RST, ADOC", icon: FileText, accept: ".md,.txt,.rst,.adoc" },
+  { id: "web", label: "Web / Markup", hint: "HTML", icon: Globe, accept: ".html,.htm" },
 ];
 
 export function UploadPanel({ onImported, onAsk }: UploadPanelProps) {
