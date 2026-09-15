@@ -86,9 +86,10 @@ default; set `AI_REQUEST_TIMEOUT` in `.env` (for example, `15m`) when a longer r
 Open [http://localhost:3000](http://localhost:3000), then try “What systems depend on Payment Service?”
 
 To add your own knowledge, open **Knowledge sources** in the sidebar, choose the source type and
-scope, then drop a file into the upload area. The MVP supports XLSX, CSV, YAML, JSON, Draw.io/XML,
-PlantUML, Terraform, common source-code files, Markdown, and text. Parsers first create structural
-units (rows, graph neighborhoods, functions/classes, or document sections), then embedding
+scope, then drop a file into the upload area. The MVP supports XLSX, CSV, YAML, JSON, Draw.io/XML
+(including generic, non-diagram XML), PlantUML, Terraform/HCL, INI/TOML/`.env`-style config files,
+HTML, common source-code files (including extensionless files like `Dockerfile`/`Makefile`), Markdown,
+and text. Parsers first create structural
 similarity merges adjacent related units into semantic chunks. `SEMANTIC_CHUNK_SIMILARITY`,
 `SEMANTIC_CHUNK_MIN_CHARS`, `SEMANTIC_CHUNK_MAX_CHARS`, and `SEMANTIC_CHUNK_MAX_UNITS` tune the
 boundaries. Chunks and their embeddings are persisted in SurrealDB (the `surrealdb` service), which
