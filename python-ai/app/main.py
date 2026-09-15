@@ -64,6 +64,7 @@ class AnswerRequest(BaseModel):
 class AnswerResponse(BaseModel):
     answer: str
     sources: list[str]
+    suggested_questions: list[str] = []
 
 
 class IngestResponse(BaseModel):
@@ -104,7 +105,18 @@ async def answer(request: AnswerRequest) -> AnswerResponse:
         response = await provider.generate(request.message, [record.text for record in records])
     except LLMProviderError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
-    return AnswerResponse(answer=response, sources=list(dict.fromkeys(record.source for record in records)))
+    try:
+        suggested_questions = await provider.suggest_followups(
+            request.message, response, [record.text for record in records]
+        )
+    except LLMProviderError:
+        # Follow-up suggestions are a nice-to-have; never fail the answer because of them.
+        suggested_questions = []
+    return AnswerResponse(
+        answer=response,
+        sources=list(dict.fromkeys(record.source for record in records)),
+        suggested_questions=suggested_questions,
+    )
 
 
 @app.post("/v1/knowledge/search")

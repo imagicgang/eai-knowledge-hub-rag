@@ -8,6 +8,12 @@ Never invent systems, owners, dependencies, or technical details.
 Answer in the same language as the user's question.
 Be concise, and mention the relevant source facts in your explanation."""
 
+SUGGEST_FOLLOWUPS_SYSTEM_PROMPT = """You suggest natural follow-up questions for a knowledge-base assistant.
+Given the user's question, the assistant's answer, and the indexed context, propose up to 3 short
+follow-up questions the user might reasonably ask next. Output one question per line, no numbering,
+no bullets, no extra commentary, in the same language as the question. If no sensible follow-up
+exists, output nothing."""
+
 
 class LLMProvider(ABC):
     """Vendor-neutral contract used by retrieval and agent orchestration."""
@@ -27,6 +33,20 @@ class LLMProvider(ABC):
 
     async def stream(self, question: str, context: list[str]) -> AsyncIterator[str]:
         yield await self.generate(question, context)
+
+    async def suggest_followups(
+        self, question: str, answer: str, context: list[str], limit: int = 3
+    ) -> list[str]:
+        if not context:
+            return []
+        context_block = "\n\n".join(f"[{index + 1}] {item}" for index, item in enumerate(context))
+        raw = await self.complete(
+            SUGGEST_FOLLOWUPS_SYSTEM_PROMPT,
+            f"Question:\n{question}\n\nAnswer:\n{answer}\n\nIndexed knowledge context:\n{context_block}",
+            max_output_tokens=200,
+        )
+        questions = [line.strip("-•* \t") for line in raw.splitlines() if line.strip()]
+        return questions[:limit]
 
 
 class LLMProviderError(RuntimeError):
