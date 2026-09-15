@@ -11,6 +11,7 @@ import yaml
 from docx import Document as DocxDocument
 from openpyxl import load_workbook
 from pptx import Presentation
+from pypdf import PdfReader
 
 from .embeddings import EmbeddingProvider, HashEmbeddingProvider
 from .semantic_chunking import semantic_chunk
@@ -64,6 +65,8 @@ def parse_units(filename: str, content: bytes, schema: str = "") -> list[str]:
         units = _parse_html_units(content.decode("utf-8-sig"))
     elif suffix == ".docx":
         units = _parse_docx_units(content)
+    elif suffix == ".pdf":
+        units = _parse_pdf_units(content)
     elif suffix in PRESENTATION_SUFFIXES:
         units = _parse_pptx_units(content)
     elif suffix in CODE_SUFFIXES:
@@ -209,6 +212,21 @@ def _parse_docx_units(content: bytes) -> list[str]:
             cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
             if cells:
                 units.append(f"Table row {row_number}: " + "; ".join(cells))
+    return units
+
+
+def _parse_pdf_units(content: bytes) -> list[str]:
+    """Extract text per page. PDFs without a text layer (scanned images) yield no units."""
+    reader = PdfReader(io.BytesIO(content))
+    units: list[str] = []
+    for page_number, page in enumerate(reader.pages, start=1):
+        text = (page.extract_text() or "").strip()
+        if not text:
+            continue
+        for paragraph in re.split(r"\n\s*\n", text):
+            paragraph = paragraph.strip()
+            if paragraph:
+                units.append(f"Page {page_number}: {paragraph}")
     return units
 
 

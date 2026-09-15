@@ -2,6 +2,7 @@ import io
 
 import pytest
 from docx import Document
+from fpdf import FPDF
 from pptx import Presentation
 
 from app.ingestion import parse_units
@@ -91,6 +92,26 @@ def test_parses_pptx_slides_with_notes() -> None:
     assert any("Slide 1" in unit and "Payment Architecture" in unit for unit in units)
     assert any("Fraud Service" in unit for unit in units)
     assert any("Speaker notes: Discuss rollout timeline." in unit for unit in units)
+
+
+def test_parses_pdf_pages() -> None:
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=12)
+    pdf.multi_cell(0, 10, "Payment Service depends on Fraud Service.")
+    content = bytes(pdf.output())
+
+    units = parse_units("architecture-notes.pdf", content)
+    assert any("Page 1" in unit and "Payment Service depends on Fraud Service." in unit for unit in units)
+
+
+def test_pdf_with_no_extractable_text_yields_no_units() -> None:
+    pdf = FPDF()
+    pdf.add_page()
+    content = bytes(pdf.output())
+
+    units = parse_units("blank.pdf", content)
+    assert units == []
 
 
 def test_unsupported_extension_still_raises() -> None:

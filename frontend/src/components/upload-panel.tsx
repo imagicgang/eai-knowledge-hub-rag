@@ -21,7 +21,7 @@ const sourceTypes = [
   },
   { id: "config", label: "Config Files", hint: "INI, TOML, ENV, CONF", icon: Settings2, accept: ".ini,.toml,.cfg,.conf,.properties,.env" },
   { id: "diagram", label: "PlantUML", hint: "PUML", icon: Workflow, accept: ".puml,.plantuml" },
-  { id: "docs", label: "Documentation", hint: "MD, TXT, RST, ADOC, DOCX", icon: FileText, accept: ".md,.txt,.rst,.adoc,.docx" },
+  { id: "docs", label: "Documentation", hint: "MD, TXT, RST, ADOC, DOCX, PDF", icon: FileText, accept: ".md,.txt,.rst,.adoc,.docx,.pdf" },
   { id: "presentation", label: "Presentations", hint: "PPTX", icon: Presentation, accept: ".pptx" },
   { id: "web", label: "Web / Markup", hint: "HTML", icon: Globe, accept: ".html,.htm" },
 ];
