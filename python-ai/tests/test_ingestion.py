@@ -1,4 +1,8 @@
+import io
+
 import pytest
+from docx import Document
+from pptx import Presentation
 
 from app.ingestion import parse_units
 
@@ -56,6 +60,37 @@ def test_drawio_file_still_uses_diagram_parser() -> None:
     units = parse_units("flow.drawio", content)
     assert any("Order Service" in unit for unit in units)
     assert any("Relationship: Order Service -> Payment Service" in unit for unit in units)
+
+
+def test_parses_docx_paragraphs_and_tables() -> None:
+    document = Document()
+    document.add_paragraph("Payment Service handles checkout transactions.")
+    document.add_paragraph("It depends on Fraud Service for risk checks.")
+    table = document.add_table(rows=1, cols=2)
+    table.rows[0].cells[0].text = "Owner"
+    table.rows[0].cells[1].text = "Commerce Platform"
+    buffer = io.BytesIO()
+    document.save(buffer)
+
+    units = parse_units("architecture-notes.docx", buffer.getvalue())
+    assert any("Payment Service handles checkout transactions." in unit for unit in units)
+    assert any("Fraud Service" in unit for unit in units)
+    assert any("Table row 1" in unit and "Commerce Platform" in unit for unit in units)
+
+
+def test_parses_pptx_slides_with_notes() -> None:
+    presentation = Presentation()
+    slide = presentation.slides.add_slide(presentation.slide_layouts[1])
+    slide.shapes.title.text = "Payment Architecture"
+    slide.placeholders[1].text = "Calls Fraud Service\nWrites to Payment PostgreSQL"
+    slide.notes_slide.notes_text_frame.text = "Discuss rollout timeline."
+    buffer = io.BytesIO()
+    presentation.save(buffer)
+
+    units = parse_units("architecture.pptx", buffer.getvalue())
+    assert any("Slide 1" in unit and "Payment Architecture" in unit for unit in units)
+    assert any("Fraud Service" in unit for unit in units)
+    assert any("Speaker notes: Discuss rollout timeline." in unit for unit in units)
 
 
 def test_unsupported_extension_still_raises() -> None:

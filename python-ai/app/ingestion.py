@@ -8,7 +8,9 @@ from pathlib import Path
 from xml.etree import ElementTree
 
 import yaml
+from docx import Document as DocxDocument
 from openpyxl import load_workbook
+from pptx import Presentation
 
 from .embeddings import EmbeddingProvider, HashEmbeddingProvider
 from .semantic_chunking import semantic_chunk
@@ -22,6 +24,7 @@ CODE_SUFFIXES = {
 CONFIG_SUFFIXES = {".ini", ".toml", ".cfg", ".conf", ".properties", ".env"}
 DOCUMENT_SUFFIXES = {".md", ".txt", ".rst", ".adoc"}
 MARKUP_SUFFIXES = {".html", ".htm"}
+PRESENTATION_SUFFIXES = {".pptx"}
 NAMED_CODE_FILES = {"dockerfile", "makefile", "jenkinsfile", "vagrantfile"}
 
 
@@ -59,6 +62,10 @@ def parse_units(filename: str, content: bytes, schema: str = "") -> list[str]:
         units = _parse_config_units(content.decode("utf-8-sig"))
     elif suffix in MARKUP_SUFFIXES:
         units = _parse_html_units(content.decode("utf-8-sig"))
+    elif suffix == ".docx":
+        units = _parse_docx_units(content)
+    elif suffix in PRESENTATION_SUFFIXES:
+        units = _parse_pptx_units(content)
     elif suffix in CODE_SUFFIXES:
         units = _parse_code_units(content.decode("utf-8-sig"), suffix)
     elif suffix in DOCUMENT_SUFFIXES:
@@ -192,6 +199,40 @@ def _parse_html_units(value: str) -> list[str]:
     text = html.unescape(re.sub(r"<[^>]+>", " ", value))
     text = re.sub(r"[ \t]+", " ", text)
     return [block.strip() for block in re.split(r"\n\s*\n", text) if block.strip()]
+
+
+def _parse_docx_units(content: bytes) -> list[str]:
+    document = DocxDocument(io.BytesIO(content))
+    units: list[str] = [paragraph.text.strip() for paragraph in document.paragraphs if paragraph.text.strip()]
+    for table in document.tables:
+        for row_number, row in enumerate(table.rows, start=1):
+            cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+            if cells:
+                units.append(f"Table row {row_number}: " + "; ".join(cells))
+    return units
+
+
+def _parse_pptx_units(content: bytes) -> list[str]:
+    presentation = Presentation(io.BytesIO(content))
+    units: list[str] = []
+    for slide_number, slide in enumerate(presentation.slides, start=1):
+        lines = [
+            "\n".join(paragraph.text.strip() for paragraph in shape.text_frame.paragraphs if paragraph.text.strip())
+            for shape in slide.shapes
+            if shape.has_text_frame and shape.text_frame.text.strip()
+        ]
+        notes = (
+            slide.notes_slide.notes_text_frame.text.strip()
+            if slide.has_notes_slide and slide.notes_slide.notes_text_frame
+            else ""
+        )
+        if not lines and not notes:
+            continue
+        unit = f"Slide {slide_number}: " + "\n".join(lines)
+        if notes:
+            unit += f"\nSpeaker notes: {notes}"
+        units.append(unit.strip())
+    return units
 
 
 def _parse_plantuml_units(value: str) -> list[str]:
